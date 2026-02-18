@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ledgerly_app/screens/dashboard_screen.dart';
 import 'package:ledgerly_app/screens/party_ledger_screen.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
+import 'package:ledgerly_app/auth_gate.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ledgerly_app/supabase_constants.dart';
@@ -26,11 +27,12 @@ class LedgerlyApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system, // Or force ThemeMode.light based on preference
       debugShowCheckedModeBanner: false,
-      initialRoute: '/',
+      home: const AuthGate(),
       routes: {
-        '/': (context) => const DashboardScreen(),
+        '/dashboard': (context) => const DashboardScreen(),
         '/party_ledger': (context) => const PartyLedgerScreen(),
       },
     );
   }
 }
+

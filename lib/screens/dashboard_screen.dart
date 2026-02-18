@@ -48,24 +48,35 @@ class DashboardScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.success.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.success.withOpacity(0.2)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.success.withOpacity(0.2)),
                         ),
-                        const SizedBox(width: 4),
-                        Text('ONLINE', style: TextStyle(color: AppColors.success, fontSize: 10, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 4),
+                            Text('ONLINE', style: TextStyle(color: AppColors.success, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.logout, color: AppColors.slate500),
+                        onPressed: () async {
+                           await Supabase.instance.client.auth.signOut();
+                        },
+                      ),
+                    ],
                   )
                 ],
               ),
@@ -294,50 +305,105 @@ class DashboardScreen extends StatelessWidget {
   Future<void> _showAddPartyDialog(BuildContext context) async {
     final nameController = TextEditingController();
     final amountController = TextEditingController();
+    DateTime? selectedDate = DateTime.now().add(const Duration(days: 7));
+    String selectedStatus = 'Unpaid';
+    final List<String> statusOptions = ['Paid', 'Unpaid', 'Overdue'];
 
     return showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Add New Party'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Party Name'),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Add New Party'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Party Name'),
+                  ),
+                  TextField(
+                    controller: amountController,
+                    decoration: const InputDecoration(labelText: 'Amount'),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text('Status: '),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: selectedStatus,
+                        items: statusOptions.map((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        }).toList(),
+                        onChanged: (newValue) {
+                          setState(() {
+                            selectedStatus = newValue!;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(selectedDate == null 
+                          ? 'No Date Chosen!' 
+                          : 'Due: ${DateFormat('MMM dd, yyyy').format(selectedDate!)}'),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate ?? DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2101),
+                          );
+                          if (pickedDate != null && pickedDate != selectedDate) {
+                            setState(() {
+                              selectedDate = pickedDate;
+                            });
+                          }
+                        },
+                        child: const Text('Choose Date'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              TextField(
-                controller: amountController,
-                decoration: const InputDecoration(labelText: 'Amount'),
-                keyboardType: TextInputType.number,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameController.text;
-                final amount = double.tryParse(amountController.text) ?? 0.0;
-                if (name.isNotEmpty) {
-                  try {
-                    await Supabase.instance.client.from('parties').insert({
-                      'name': name,
-                      'amount': amount,
-                      'avatar_text': name.substring(0, 2).toUpperCase(),
-                      'status': 'Unpaid', 
-                      'due_date': DateTime.now().add(const Duration(days: 7)).toIso8601String(),
-                    });
-                    if (context.mounted) Navigator.pop(context);
-                  } catch (e) {
-                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                  }
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameController.text;
+                    final amount = double.tryParse(amountController.text) ?? 0.0;
+                    if (name.isNotEmpty) {
+                      try {
+                        final userId = Supabase.instance.client.auth.currentUser!.id;
+                        await Supabase.instance.client.from('parties').insert({
+                          'user_id': userId,
+                          'name': name,
+                          'amount': amount,
+                          'avatar_text': name.substring(0, 2).toUpperCase(),
+                          'status': selectedStatus,
+                          'due_date': selectedDate?.toIso8601String(),
+                        });
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          }
         );
       },
     );
