@@ -4,20 +4,58 @@ import 'package:intl/intl.dart';
 import 'package:ledgerly_app/models/party.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class PartyLedgerScreen extends StatelessWidget {
+class PartyLedgerScreen extends StatefulWidget {
   const PartyLedgerScreen({super.key});
 
   @override
+  State<PartyLedgerScreen> createState() => _PartyLedgerScreenState();
+}
+
+class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
+  Party? _initialParty;
+  Stream<List<Map<String, dynamic>>>? _transactionsStream;
+  Stream<List<Map<String, dynamic>>>? _partyStream;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialParty == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Party) {
+        _initialParty = args;
+        
+        // Also stream the party itself to update real-time 'Total Outstanding' cash seamlessly
+        _partyStream = Supabase.instance.client
+            .from('parties')
+            .stream(primaryKey: ['id'])
+            .eq('id', _initialParty!.id);
+
+        _transactionsStream = Supabase.instance.client
+            .from('transactions')
+            .stream(primaryKey: ['id'])
+            .eq('party_id', _initialParty!.id)
+            .order('created_at', ascending: false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Extract the party object safely
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args == null || args is! Party) {
+    if (_initialParty == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Error')),
         body: const Center(child: Text('Party data not found. Please navigate from the dashboard.')),
       );
     }
-    final party = args;
+    
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _partyStream,
+      builder: (context, partySnapshot) {
+        // Fallback to initial party if stream hasn't yielded yet
+        Party party = _initialParty!;
+        if (partySnapshot.hasData && partySnapshot.data!.isNotEmpty) {
+          party = Party.fromJson(partySnapshot.data!.first);
+        }
     
     final isCustomer = party.partyType != 'Supplier';
     final amountFormatted = NumberFormat("#,##0").format(party.amount);
@@ -165,11 +203,7 @@ class PartyLedgerScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: Supabase.instance.client
-                        .from('transactions')
-                        .stream(primaryKey: ['id'])
-                        .eq('party_id', party.id)
-                        .order('created_at', ascending: false),
+                    stream: _transactionsStream,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
@@ -264,6 +298,8 @@ class PartyLedgerScreen extends StatelessWidget {
         ],
       ),
     );
+      }, // StreamBuilder for Party
+    ); // StreamBuilder
   }
 
   Future<void> _showAddTransactionDialog(BuildContext context, Party party, String transactionType) async {
