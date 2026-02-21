@@ -2,14 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import 'package:ledgerly_app/models/party.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PartyLedgerScreen extends StatelessWidget {
   const PartyLedgerScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Extract the party object passed from DashboardScreen
-    final party = ModalRoute.of(context)!.settings.arguments as Party;
+    // Extract the party object safely
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args == null || args is! Party) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Error')),
+        body: const Center(child: Text('Party data not found. Please navigate from the dashboard.')),
+      );
+    }
+    final party = args;
     
     final isCustomer = party.partyType != 'Supplier';
     final amountFormatted = NumberFormat("#,##0").format(party.amount);
@@ -97,7 +105,8 @@ class PartyLedgerScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Summary Card
+                   // To ensure the balance auto-updates with Supabase trigger we should really use a StreamBuilder for the party itself,
+                   // but for now, we'll show what was passed in, trusting the user returns to Dashboard to see refreshed Party overall balance
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -155,13 +164,55 @@ class PartyLedgerScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  // TODO: Real Transactions List will go here
-                  const Padding(
-                    padding: EdgeInsets.all(32.0),
-                    child: Center(
-                      child: Text('Transactions will be listed here.', style: TextStyle(color: AppColors.slate500)),
-                    ),
+                  StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: Supabase.instance.client
+                        .from('transactions')
+                        .stream(primaryKey: ['id'])
+                        .eq('party_id', party.id)
+                        .order('created_at', ascending: false),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: AppColors.danger)));
+                      }
+
+                      final transactions = snapshot.data ?? [];
+
+                      if (transactions.isEmpty) {
+                        return const Center(child: Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: Text('No transactions yet.', style: TextStyle(color: AppColors.slate500)),
+                        ));
+                      }
+
+                      return Column(
+                        children: transactions.map((tx) {
+                          final date = DateTime.parse(tx['created_at']);
+                          final isGot = tx['transaction_type'] == 'Got';
+                          
+                          // Simplified: Not showing running balance in UI currently, just the tx amount.
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12.0),
+                            child: _buildTransactionItem(
+                              context,
+                              icon: isGot ? Icons.arrow_downward : Icons.arrow_upward,
+                              iconColor: isGot ? AppColors.success : AppColors.danger,
+                              title: tx['description']?.isEmpty ?? true 
+                                  ? (isGot ? 'Received Amount' : 'Given Amount') 
+                                  : tx['description'],
+                              subtitle: '${DateFormat('MMM dd, h:mm a').format(date)} ${tx['payment_mode'] != 'None' ? '• Via ${tx['payment_mode']}' : ''}',
+                              amount: '${isGot ? '+' : '-'}\$${NumberFormat("#,##0").format(tx['amount'])}',
+                              balance: '', // Running balance omitted for simplicity
+                              isPositive: isGot,
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
+
 
                   const SizedBox(height: 100), // Bottom padding
                 ],
@@ -179,9 +230,9 @@ class PartyLedgerScreen extends StatelessWidget {
                children: [
                  Expanded(
                    child: OutlinedButton.icon(
-                     onPressed: () {},
+                     onPressed: () => _showAddTransactionDialog(context, party, 'Gave'),
                      icon: const Icon(Icons.add_circle_outline),
-                     label: const Text('Add Transaction'),
+                     label: const Text('Gave Amount'),
                      style: OutlinedButton.styleFrom(
                        foregroundColor: AppColors.primary,
                        side: const BorderSide(color: AppColors.primary, width: 2),
@@ -194,9 +245,9 @@ class PartyLedgerScreen extends StatelessWidget {
                  const SizedBox(width: 12),
                  Expanded(
                    child: ElevatedButton.icon(
-                     onPressed: () {},
+                     onPressed: () => _showAddTransactionDialog(context, party, 'Got'),
                      icon: const Icon(Icons.account_balance_wallet),
-                     label: const Text('Record Payment'),
+                     label: const Text('Got Amount'),
                      style: ElevatedButton.styleFrom(
                        backgroundColor: AppColors.primary,
                        foregroundColor: Colors.white,
@@ -212,6 +263,90 @@ class PartyLedgerScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showAddTransactionDialog(BuildContext context, Party party, String transactionType) async {
+    final amountController = TextEditingController();
+    final descriptionController = TextEditingController();
+    String paymentMode = 'None';
+    final List<String> paymentModes = ['None', 'Cash', 'Bank'];
+
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('$transactionType Amount'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                   TextField(
+                    controller: amountController,
+                    decoration: const InputDecoration(labelText: 'Amount'),
+                    keyboardType: TextInputType.number,
+                  ),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(labelText: 'Description (Optional)'),
+                  ),
+                  const SizedBox(height: 16),
+                  if (transactionType == 'Got' || transactionType == 'Gave') // For both, we might want to track where cash went
+                    Row(
+                      children: [
+                        const Text('Via: '),
+                        const SizedBox(width: 8),
+                        DropdownButton<String>(
+                          value: paymentMode,
+                          items: paymentModes.map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
+                          onChanged: (newValue) {
+                            setState(() {
+                              paymentMode = newValue!;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () async {
+                    final amount = double.tryParse(amountController.text) ?? 0.0;
+                    if (amount > 0) {
+                      try {
+                        final SupabaseClient supabase = Supabase.instance.client;
+                        final userId = supabase.auth.currentUser!.id;
+                        
+                        await supabase.from('transactions').insert({
+                          'user_id': userId,
+                          'party_id': party.id,
+                          'amount': amount,
+                          'description': descriptionController.text,
+                          'transaction_type': transactionType,
+                          'payment_mode': paymentMode,
+                        });
+                        
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          }
+        );
+      },
     );
   }
 
