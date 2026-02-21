@@ -252,24 +252,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 32),
                     // Outstanding Overview
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Outstanding Overview', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                          TextButton(
-                            onPressed: () {},
-                            child: Row(
-                              children: [
-                                Text('View All', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
-                                const Icon(Icons.chevron_right, size: 16, color: AppColors.primary),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                     const SizedBox(height: 8),
                     // Tabs
                     Padding(

@@ -1,11 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
+import 'package:intl/intl.dart';
+import 'package:ledgerly_app/models/party.dart';
 
 class PartyLedgerScreen extends StatelessWidget {
   const PartyLedgerScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Extract the party object passed from DashboardScreen
+    final party = ModalRoute.of(context)!.settings.arguments as Party;
+    
+    final isCustomer = party.partyType != 'Supplier';
+    final amountFormatted = NumberFormat("#,##0").format(party.amount);
+    
+    // Determine status color
+    Color statusColor;
+    switch (party.status) {
+      case 'Paid':
+        statusColor = AppColors.success;
+        break;
+      case 'Overdue':
+        statusColor = AppColors.danger;
+        break;
+      case 'Unpaid':
+      default:
+        statusColor = AppColors.warning;
+        break;
+    }
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: PreferredSize(
@@ -32,8 +55,8 @@ class PartyLedgerScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text('Acme Corp', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                          const Text('Last active: 2 hours ago', style: TextStyle(fontSize: 12, color: AppColors.slate500)),
+                          Text(party.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                          Text(isCustomer ? 'Customer' : 'Supplier', style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
                         ],
                       ),
                     ],
@@ -93,7 +116,7 @@ class PartyLedgerScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            const Text('\$2,500', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                            Text('\$$amountFormatted', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                             const SizedBox(width: 4),
                             Text('USD', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14, fontWeight: FontWeight.w500)),
                           ],
@@ -108,16 +131,16 @@ class PartyLedgerScreen extends StatelessWidget {
                               children: [
                                 const Icon(Icons.event_repeat, color: Colors.white, size: 16),
                                 const SizedBox(width: 4),
-                                const Text('Next due: Oct 24, 2023', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                Text(party.dueDate != null ? 'Due: ${DateFormat('MMM dd, yyyy').format(party.dueDate!)}' : 'No Due Date', style: const TextStyle(color: Colors.white, fontSize: 12)),
                               ],
                             ),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: statusColor,
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: const Text('RECEIVABLE', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                              child: Text(party.status.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
@@ -129,63 +152,17 @@ class PartyLedgerScreen extends StatelessWidget {
                   Row(
                     children: [
                       _buildTabItem('Transactions', isActive: true),
-                      const SizedBox(width: 24),
-                      _buildTabItem('Details'),
-                      const SizedBox(width: 24),
-                      _buildTabItem('Reports'),
                     ],
                   ),
                   const SizedBox(height: 24),
-                  // Date Group: October 2023
-                  _buildDateGroup('October 2023'),
-                  const SizedBox(height: 12),
-                  _buildTransactionItem(
-                    context,
-                    icon: Icons.receipt_long,
-                    iconColor: AppColors.warning,
-                    title: 'Expense: Office Supplies',
-                    subtitle: 'Oct 18, 2:15 PM',
-                    amount: '+\$100.00',
-                    balance: 'Bal: \$3,300',
-                    isPositive: true,
+                  // TODO: Real Transactions List will go here
+                  const Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Center(
+                      child: Text('Transactions will be listed here.', style: TextStyle(color: AppColors.slate500)),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  _buildTransactionItem(
-                    context,
-                    icon: Icons.shopping_cart,
-                    iconColor: Colors.blue,
-                    title: 'Purchase Bill #PB-882',
-                    subtitle: 'Oct 15, 11:00 AM',
-                    amount: '+\$200.00',
-                    balance: 'Bal: \$3,200',
-                    isPositive: true,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildTransactionItem(
-                    context,
-                    icon: Icons.payments, // Emerald
-                    iconColor: AppColors.success,
-                    title: 'Payment Received',
-                    subtitle: 'Oct 12, 09:45 AM',
-                    amount: '-\$500.00',
-                    balance: 'Bal: \$3,000',
-                    isPositive: false,
-                    badge: 'SETTLED',
-                  ),
-                  const SizedBox(height: 24),
-                   // Date Group: September 2023
-                  _buildDateGroup('September 2023'),
-                  const SizedBox(height: 12),
-                  _buildTransactionItem(
-                    context,
-                    icon: Icons.description,
-                    iconColor: AppColors.primary,
-                    title: 'Invoice Created #INV-441',
-                    subtitle: 'Sep 28, 04:30 PM',
-                    amount: '+\$1,000.00',
-                    balance: 'Bal: \$3,500',
-                    isPositive: true,
-                  ),
+
                   const SizedBox(height: 100), // Bottom padding
                 ],
               ),
