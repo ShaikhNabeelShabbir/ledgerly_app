@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
 import 'package:ledgerly_app/screens/party_ledger_screen.dart';
+import 'package:ledgerly_app/screens/settings_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ledgerly_app/models/party.dart';
 import 'package:intl/intl.dart';
@@ -119,22 +120,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 child: const Icon(Icons.account_balance_wallet, color: AppColors.primary),
                               ),
                               const SizedBox(width: 12),
-                              GestureDetector(
-                                onTap: () => _updateBusinessName(context, businessName),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(businessName, style: const TextStyle(color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.bold)),
-                                        const SizedBox(width: 4),
-                                        const Icon(Icons.edit, size: 14, color: AppColors.slate500),
-                                      ],
-                                    ),
-                                    Text(DateFormat('MMM dd, yyyy').format(DateTime.now()), style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
-                                  ],
-                                ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(businessName, style: const TextStyle(color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.bold)),
+                                  Text('Today, ${DateFormat('MMM dd').format(DateTime.now())}', style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
+                                ],
                               ),
                             ],
                           ),
@@ -184,9 +176,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Row(
                         children: [
-                          _buildSummaryCard(context, Icons.payments, 'Cash in Hand', '\$${NumberFormat("#,##0").format(cashInHand)}', onTap: () => _updateBalance(context, 'cash_in_hand', cashInHand), isEditable: true),
+                          _buildSummaryCard(context, Icons.payments, 'Cash in Hand', '\$${NumberFormat("#,##0").format(cashInHand)}', onTap: () {
+                          }, isEditable: true),
                           const SizedBox(width: 16),
-                          _buildSummaryCard(context, Icons.account_balance, 'Bank Balance', '\$${NumberFormat("#,##0").format(bankBalance)}', onTap: () => _updateBalance(context, 'bank_balance', bankBalance), isEditable: true),
+                          _buildSummaryCard(context, Icons.account_balance, 'Bank Balance', '\$${NumberFormat("#,##0").format(bankBalance)}', onTap: () {
+                          }, isEditable: true),
                           const SizedBox(width: 16),
                           _buildSummaryCard(context, Icons.call_received, 'Receivable', '\$${NumberFormat("#,##0").format(receivable)}', onTap: () => setState(() => _isCustomerTab = true)),
                           const SizedBox(width: 16),
@@ -282,7 +276,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _buildNavItem(Icons.group, 'Parties'),
                     _buildNavItem(Icons.receipt_long, 'Transactions'),
                     _buildNavItem(Icons.assessment, 'Reports'),
-                    _buildNavItem(Icons.settings, 'Settings'),
+                    _buildNavItem(Icons.settings, 'Settings', onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => SettingsScreen(initialProfile: profile)));
+                    }),
                   ],
                 ),
               ),
@@ -293,36 +289,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<void> _updateBusinessName(BuildContext context, String currentName) async {
-    final controller = TextEditingController(text: currentName);
-    showDialog(context: context, builder: (context) => AlertDialog(
-      title: const Text('Update Business Name'),
-      content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Name')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(onPressed: () async {
-          await Supabase.instance.client.from('profiles').update({'business_name': controller.text}).eq('id', _userId!);
-          if (context.mounted) Navigator.pop(context);
-        }, child: const Text('Save')),
-      ],
-    ));
-  }
-
-  Future<void> _updateBalance(BuildContext context, String field, double currentAmount) async {
-    final controller = TextEditingController(text: currentAmount.toString());
-    showDialog(context: context, builder: (context) => AlertDialog(
-      title: Text('Update ${field.replaceAll('_', ' ').toUpperCase()}'),
-      content: TextField(controller: controller, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(onPressed: () async {
-          final val = double.tryParse(controller.text) ?? 0.0;
-          await Supabase.instance.client.from('profiles').update({field: val}).eq('id', _userId!);
-          if (context.mounted) Navigator.pop(context);
-        }, child: const Text('Save')),
-      ],
-    ));
-  }
+  // Discarding original _updateBusinessName and _updateBalance which were here
 
   Future<void> _showAddPartyDialog(BuildContext context) async {
     final nameController = TextEditingController();
@@ -751,14 +718,17 @@ DropdownButtonFormField<String>(
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, {bool isActive = false}) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: isActive ? AppColors.primary : AppColors.slate500), 
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 10, fontWeight: isActive ? FontWeight.bold : FontWeight.w500, color: isActive ? AppColors.primary : AppColors.slate500)),
-      ],
+  Widget _buildNavItem(IconData icon, String label, {bool isActive = false, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: isActive ? AppColors.primary : AppColors.slate500), 
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: isActive ? FontWeight.bold : FontWeight.w500, color: isActive ? AppColors.primary : AppColors.slate500)),
+        ],
+      ),
     );
   }
 }
