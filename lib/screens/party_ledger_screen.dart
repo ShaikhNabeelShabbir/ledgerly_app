@@ -60,20 +60,6 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     final isCustomer = party.partyType != 'Supplier';
     final amountFormatted = NumberFormat("#,##0").format(party.amount);
     
-    // Determine status color
-    Color statusColor;
-    switch (party.status) {
-      case 'Paid':
-        statusColor = AppColors.success;
-        break;
-      case 'Overdue':
-        statusColor = AppColors.danger;
-        break;
-      case 'Unpaid':
-      default:
-        statusColor = AppColors.warning;
-        break;
-    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -181,14 +167,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                 Text(party.dueDate != null ? 'Due: ${DateFormat('MMM dd, yyyy').format(party.dueDate!)}' : 'No Due Date', style: const TextStyle(color: Colors.white, fontSize: 12)),
                               ],
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: statusColor,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(party.status.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ),
+
                           ],
                         ),
                       ],

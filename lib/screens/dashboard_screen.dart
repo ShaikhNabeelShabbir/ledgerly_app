@@ -81,15 +81,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Let's deduce type from the 'party_type' column we added.
             for (var p in partiesData) {
               final amount = (p['amount'] as num?)?.toDouble() ?? 0.0;
-              final status = p['status'] as String? ?? 'Unpaid';
               final type = p['party_type'] as String? ?? 'Customer';
 
-              if (status == 'Unpaid' || status == 'Overdue') {
-                if (type == 'Customer') {
-                  receivable += amount;
-                } else {
-                  payable += amount;
-                }
+              if (type == 'Customer') {
+                receivable += amount;
+              } else {
+                payable += amount;
               }
             }
 
@@ -296,10 +293,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _showAddPartyDialog(BuildContext context) async {
     final nameController = TextEditingController();
-    final amountController = TextEditingController();
     DateTime? selectedDate = DateTime.now().add(const Duration(days: 7));
-    String selectedStatus = 'Unpaid';
-    final List<String> statusOptions = ['Paid', 'Unpaid', 'Overdue'];
     String selectedPartyType = 'Customer'; // New: Party Type
 
     return showDialog(
@@ -315,11 +309,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   TextField(
                     controller: nameController,
                     decoration: const InputDecoration(labelText: 'Party Name'),
-                  ),
-                  TextField(
-                    controller: amountController,
-                    decoration: const InputDecoration(labelText: 'Amount'),
-                    keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 16),
 DropdownButtonFormField<String>(
@@ -345,27 +334,7 @@ DropdownButtonFormField<String>(
   },
 ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text('Status: '),
-                      const SizedBox(width: 8),
-                      DropdownButton<String>(
-                        value: selectedStatus,
-                        items: statusOptions.map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                        onChanged: (newValue) {
-                          setState(() {
-                            selectedStatus = newValue!;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+
                   Row(
                     children: [
                       Expanded(
@@ -398,16 +367,14 @@ DropdownButtonFormField<String>(
                 ElevatedButton(
                   onPressed: () async {
                     final name = nameController.text;
-                    final amount = double.tryParse(amountController.text) ?? 0.0;
                     if (name.isNotEmpty) {
                       try {
                         final userId = Supabase.instance.client.auth.currentUser!.id;
                         await Supabase.instance.client.from('parties').insert({
                           'user_id': userId,
                           'name': name,
-                          'amount': amount,
+                          'amount': 0.0, // Amount enforced to 0 on creation
                           'avatar_text': name.substring(0, 2).toUpperCase(),
-                          'status': selectedStatus,
                           'party_type': selectedPartyType,
                           'due_date': selectedDate?.toIso8601String(),
                         });
@@ -464,23 +431,9 @@ DropdownButtonFormField<String>(
   }
 
   Widget _buildPartyItem(BuildContext context, Party party) {
-    // Determine colors/status logic
-    Color statusColor;
-    bool isOverdue = false;
-    
-    switch (party.status) {
-      case 'Paid':
-        statusColor = AppColors.success;
-        break;
-      case 'Overdue':
-        statusColor = AppColors.danger;
-        isOverdue = true;
-        break;
-      case 'Unpaid':
-      default:
-        statusColor = AppColors.warning;
-        break;
-    }
+    bool isOverdue = party.dueDate != null && 
+        party.dueDate!.isBefore(DateTime.now()) && 
+        party.amount > 0;
 
     final dateText = party.dueDate != null 
         ? 'Due: ${DateFormat('MMM dd').format(party.dueDate!)}'
@@ -572,15 +525,6 @@ DropdownButtonFormField<String>(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text('\$${NumberFormat("#,##0").format(party.amount)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(party.status.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor)),
-                ),
               ],
             ),
           ],
@@ -591,11 +535,8 @@ DropdownButtonFormField<String>(
 
   Future<void> _showEditPartyDialog(BuildContext context, Party party) async {
     final nameController = TextEditingController(text: party.name);
-    final amountController = TextEditingController(text: party.amount.toString());
     DateTime? selectedDate = party.dueDate;
-    String selectedStatus = party.status;
     String selectedPartyType = party.partyType ?? 'Customer';
-    final List<String> statusOptions = ['Paid', 'Unpaid', 'Overdue'];
 
     return showDialog(
       context: context,
@@ -610,11 +551,6 @@ DropdownButtonFormField<String>(
                   TextField(
                     controller: nameController,
                     decoration: const InputDecoration(labelText: 'Party Name'),
-                  ),
-                  TextField(
-                    controller: amountController,
-                    decoration: const InputDecoration(labelText: 'Amount'),
-                    keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 16),
                    Row(
@@ -642,27 +578,7 @@ DropdownButtonFormField<String>(
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text('Status: '),
-                      const SizedBox(width: 8),
-                      DropdownButton<String>(
-                        value: selectedStatus,
-                        items: statusOptions.map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                        onChanged: (newValue) {
-                          setState(() {
-                            selectedStatus = newValue!;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+
                   Row(
                     children: [
                       Text(selectedDate == null 
@@ -694,14 +610,11 @@ DropdownButtonFormField<String>(
                 ElevatedButton(
                   onPressed: () async {
                     final name = nameController.text;
-                    final amount = double.tryParse(amountController.text) ?? 0.0;
                     if (name.isNotEmpty) {
                       try {
                         await Supabase.instance.client.from('parties').update({
                           'name': name,
-                          'amount': amount,
                           'avatar_text': name.substring(0, 2).toUpperCase(),
-                          'status': selectedStatus,
                           'party_type': selectedPartyType,
                           'due_date': selectedDate?.toIso8601String(),
                         }).eq('id', party.id);

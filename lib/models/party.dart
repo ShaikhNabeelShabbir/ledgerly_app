@@ -3,7 +3,7 @@ class Party {
   final String name;
   final String avatarText;
   final double amount;
-  final String status;
+
   final String? partyType; // Added partyType field
   final DateTime? dueDate;
   final DateTime createdAt;
@@ -13,7 +13,7 @@ class Party {
     required this.name,
     required this.avatarText,
     required this.amount,
-    required this.status,
+
     this.partyType, // Added partyType to constructor
     this.dueDate,
     required this.createdAt,
@@ -25,7 +25,7 @@ class Party {
       name: json['name'] as String,
       avatarText: json['avatar_text'] as String? ?? '',
       amount: (json['amount'] as num).toDouble(),
-      status: json['status'] as String,
+
       partyType: json['party_type'] as String?, // Added partyType to fromJson
       dueDate: json['due_date'] != null ? DateTime.parse(json['due_date'] as String) : null,
       createdAt: DateTime.parse(json['created_at'] as String),
@@ -37,7 +37,7 @@ class Party {
       'name': name,
       'avatar_text': avatarText,
       'amount': amount,
-      'status': status,
+
       'party_type': partyType,
       'due_date': dueDate?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
