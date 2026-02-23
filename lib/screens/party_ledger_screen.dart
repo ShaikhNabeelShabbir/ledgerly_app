@@ -203,22 +203,45 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       return Column(
                         children: transactions.map((tx) {
                           final date = DateTime.parse(tx['created_at']);
-                          final isGot = tx['transaction_type'] == 'Got';
+                          final type = tx['transaction_type'] as String;
+                          String amountPrefix = '';
+                          Color txColor = AppColors.slate500;
+                          IconData txIcon = Icons.swap_horiz;
+                          String txTitle = tx['description']?.isEmpty ?? true ? type : tx['description'];
                           
-                          // Simplified: Not showing running balance in UI currently, just the tx amount.
+                          if (type == 'Got') {
+                            amountPrefix = '+';
+                            txColor = AppColors.success;
+                            txIcon = Icons.arrow_downward;
+                            if (tx['description']?.isEmpty ?? true) txTitle = 'Received Amount';
+                          } else if (type == 'Gave') {
+                            amountPrefix = '-';
+                            txColor = AppColors.danger;
+                            txIcon = Icons.arrow_upward;
+                            if (tx['description']?.isEmpty ?? true) txTitle = 'Given Amount';
+                          } else if (type == 'To Receive') {
+                            amountPrefix = '+';
+                            txColor = Colors.orange;
+                            txIcon = Icons.arrow_downward;
+                            if (tx['description']?.isEmpty ?? true) txTitle = 'Amount to be Received';
+                          } else if (type == 'To Give') {
+                            amountPrefix = '-';
+                            txColor = Colors.orange;
+                            txIcon = Icons.arrow_upward;
+                            if (tx['description']?.isEmpty ?? true) txTitle = 'Amount to be Given';
+                          }
+
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12.0),
                             child: _buildTransactionItem(
                               context,
-                              icon: isGot ? Icons.arrow_downward : Icons.arrow_upward,
-                              iconColor: isGot ? AppColors.success : AppColors.danger,
-                              title: tx['description']?.isEmpty ?? true 
-                                  ? (isGot ? 'Received Amount' : 'Given Amount') 
-                                  : tx['description'],
+                              icon: txIcon,
+                              iconColor: txColor,
+                              title: txTitle,
                               subtitle: '${DateFormat('MMM dd, h:mm a').format(date)} ${tx['payment_mode'] != 'None' ? '• Via ${tx['payment_mode']}' : ''}',
-                              amount: '${isGot ? '+' : '-'}\$${NumberFormat("#,##0").format(tx['amount'])}',
+                              amount: '$amountPrefix\$${NumberFormat("#,##0").format(tx['amount'])}',
                               balance: '', // Running balance omitted for simplicity
-                              isPositive: isGot,
+                              isPositive: amountPrefix == '+',
                             ),
                           );
                         }).toList(),
@@ -242,25 +265,45 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
              child: Row(
                children: [
                  Expanded(
-                   child: OutlinedButton.icon(
-                     onPressed: () => _showAddTransactionDialog(context, party, 'Gave'),
-                     icon: const Icon(Icons.add_circle_outline),
-                     label: const Text('Gave Amount'),
-                     style: OutlinedButton.styleFrom(
-                       foregroundColor: AppColors.primary,
-                       side: const BorderSide(color: AppColors.primary, width: 2),
-                       padding: const EdgeInsets.symmetric(vertical: 16),
-                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                       textStyle: const TextStyle(fontWeight: FontWeight.bold),
-                     ),
-                   ),
-                 ),
-                 const SizedBox(width: 12),
-                 Expanded(
                    child: ElevatedButton.icon(
-                     onPressed: () => _showAddTransactionDialog(context, party, 'Got'),
-                     icon: const Icon(Icons.account_balance_wallet),
-                     label: const Text('Got Amount'),
+                     onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (context) => SafeArea(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ListTile(
+                                  leading: const Icon(Icons.arrow_downward, color: AppColors.success),
+                                  title: const Text('Got Amount'),
+                                  subtitle: const Text('Received cash or bank transfer'),
+                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, 'Got'); },
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.arrow_upward, color: AppColors.danger),
+                                  title: const Text('Gave Amount'),
+                                  subtitle: const Text('Paid cash or bank transfer'),
+                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, 'Gave'); },
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.arrow_downward, color: Colors.orange),
+                                  title: const Text('Amount to be Received'),
+                                  subtitle: const Text('Credit sale or debt accrued to them'),
+                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, 'To Receive'); },
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.arrow_upward, color: Colors.orange),
+                                  title: const Text('Amount to be Given'),
+                                  subtitle: const Text('Credit purchase or debt accrued to you'),
+                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, 'To Give'); },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                     },
+                     icon: const Icon(Icons.add),
+                     label: const Text('Add Transaction'),
                      style: ElevatedButton.styleFrom(
                        backgroundColor: AppColors.primary,
                        foregroundColor: Colors.white,

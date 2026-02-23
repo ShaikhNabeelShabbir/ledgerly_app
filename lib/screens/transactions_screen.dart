@@ -79,15 +79,37 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             itemBuilder: (context, index) {
               final tx = transactions[index];
               final date = DateTime.parse(tx['created_at']);
-              final isGot = tx['transaction_type'] == 'Got';
+              final type = tx['transaction_type'] as String;
               final partyId = tx['party_id'] as String;
-              final partyData = _partiesMap[partyId];
+              final partyData = _partiesMap[partyId] ?? {};
               
-              final partyName = partyData != null ? partyData['name'] : 'Unknown Party';
-              final avatarText = partyData != null ? partyData['avatar_text'] : '?';
+              final partyName = partyData['name'] ?? 'Unknown Party';
+              final avatarText = partyData['avatar_text'] ?? '?';
               
+              String defaultDesc = type;
+              String amountPrefix = '';
+              Color txColor = AppColors.slate500;
+
+              if (type == 'Got') {
+                defaultDesc = 'Received Amount';
+                amountPrefix = '+';
+                txColor = AppColors.success;
+              } else if (type == 'Gave') {
+                defaultDesc = 'Given Amount';
+                amountPrefix = '-';
+                txColor = AppColors.danger;
+              } else if (type == 'To Receive') {
+                defaultDesc = 'Amount to be Received';
+                amountPrefix = '+';
+                txColor = Colors.orange;
+              } else if (type == 'To Give') {
+                defaultDesc = 'Amount to be Given';
+                amountPrefix = '-';
+                txColor = Colors.orange;
+              }
+
               final description = tx['description']?.isEmpty ?? true 
-                  ? (isGot ? 'Received Amount' : 'Given Amount') 
+                  ? defaultDesc
                   : tx['description'];
                   
               return Padding(
@@ -123,7 +145,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(child: Text(partyName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                                Text('${isGot ? '+' : '-'}\$${NumberFormat("#,##0").format(tx['amount'])}', style: TextStyle(color: isGot ? AppColors.success : AppColors.danger, fontWeight: FontWeight.bold, fontSize: 16)),
+                                Text('$amountPrefix\$${NumberFormat("#,##0").format(tx['amount'])}', style: TextStyle(color: txColor, fontWeight: FontWeight.bold, fontSize: 16)),
                               ],
                             ),
                             const SizedBox(height: 4),
