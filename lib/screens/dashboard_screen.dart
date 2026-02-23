@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
 import 'package:ledgerly_app/screens/party_ledger_screen.dart';
 import 'package:ledgerly_app/screens/settings_screen.dart';
+import 'package:ledgerly_app/screens/transactions_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ledgerly_app/models/party.dart';
 import 'package:intl/intl.dart';
@@ -274,7 +275,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     _buildNavItem(Icons.home, 'Home', isActive: true),
                     _buildNavItem(Icons.group, 'Parties'),
-                    _buildNavItem(Icons.receipt_long, 'Transactions'),
+                    _buildNavItem(Icons.receipt_long, 'Transactions', onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsScreen()));
+                    }),
                     _buildNavItem(Icons.assessment, 'Reports'),
                     _buildNavItem(Icons.settings, 'Settings', onTap: () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => SettingsScreen(initialProfile: profile)));
