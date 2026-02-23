@@ -352,30 +352,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                       const Text('Type: '), 
-                       ChoiceChip(
-                         label: const Text('Customer'),
-                         selected: selectedPartyType == 'Customer',
-                         onSelected: (bool selected) {
-                           setState(() {
-                             selectedPartyType = 'Customer';
-                           });
-                         },
-                       ),
-                       const SizedBox(width: 8),
-                       ChoiceChip(
-                         label: const Text('Supplier'),
-                         selected: selectedPartyType == 'Supplier',
-                         onSelected: (bool selected) {
-                           setState(() {
-                             selectedPartyType = 'Supplier';
-                           });
-                         },
-                       ),
-                    ],
-                  ),
+DropdownButtonFormField<String>(
+  value: selectedPartyType,
+  decoration: const InputDecoration(
+    labelText: 'Type',
+    border: OutlineInputBorder(),
+  ),
+  items: const [
+    DropdownMenuItem(
+      value: 'Customer',
+      child: Text('Customer'),
+    ),
+    DropdownMenuItem(
+      value: 'Supplier',
+      child: Text('Supplier'),
+    ),
+  ],
+  onChanged: (String? newValue) {
+    setState(() {
+      selectedPartyType = newValue!;
+    });
+  },
+),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -400,10 +398,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Text(selectedDate == null 
-                          ? 'No Date Chosen!' 
-                          : 'Due: ${DateFormat('MMM dd, yyyy').format(selectedDate!)}'),
-                      const Spacer(),
+                      Expanded(
+                        child: Text(selectedDate == null 
+                            ? 'No Date Chosen!' 
+                            : 'Due: ${DateFormat('MMM dd, yyyy').format(selectedDate!)}'),
+                      ),
                       TextButton(
                         onPressed: () async {
                           final pickedDate = await showDatePicker(
