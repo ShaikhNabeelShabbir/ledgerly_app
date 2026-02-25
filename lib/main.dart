@@ -27,7 +27,7 @@ class LedgerlyApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system, // Or force ThemeMode.light based on preference
       debugShowCheckedModeBanner: false,
-      home: const AuthGate(),
+      home: AuthGate(),
       routes: {
         '/dashboard': (context) => const DashboardScreen(),
         '/party_ledger': (context) => const PartyLedgerScreen(),

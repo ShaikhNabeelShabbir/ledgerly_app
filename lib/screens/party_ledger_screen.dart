@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import 'package:ledgerly_app/models/party.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:ledgerly_app/services/party_service.dart';
+import 'package:ledgerly_app/services/transaction_service.dart';
 
 class PartyLedgerScreen extends StatefulWidget {
   const PartyLedgerScreen({super.key});
@@ -12,6 +13,8 @@ class PartyLedgerScreen extends StatefulWidget {
 }
 
 class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
+  final _partyService = PartyService();
+  final _transactionService = TransactionService();
   Party? _initialParty;
   Stream<List<Map<String, dynamic>>>? _transactionsStream;
   Stream<List<Map<String, dynamic>>>? _partyStream;
@@ -23,18 +26,8 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args is Party) {
         _initialParty = args;
-        
-        // Also stream the party itself to update real-time 'Total Outstanding' cash seamlessly
-        _partyStream = Supabase.instance.client
-            .from('parties')
-            .stream(primaryKey: ['id'])
-            .eq('id', _initialParty!.id);
-
-        _transactionsStream = Supabase.instance.client
-            .from('transactions')
-            .stream(primaryKey: ['id'])
-            .eq('party_id', _initialParty!.id)
-            .order('created_at', ascending: false);
+        _partyStream = _partyService.watchParty(_initialParty!.id);
+        _transactionsStream = _transactionService.watchTransactionsForParty(_initialParty!.id);
       }
     }
   }
@@ -47,19 +40,17 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
         body: const Center(child: Text('Party data not found. Please navigate from the dashboard.')),
       );
     }
-    
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _partyStream,
       builder: (context, partySnapshot) {
-        // Fallback to initial party if stream hasn't yielded yet
         Party party = _initialParty!;
         if (partySnapshot.hasData && partySnapshot.data!.isNotEmpty) {
           party = Party.fromJson(partySnapshot.data!.first);
         }
-    
+
     final isCustomer = party.partyType != 'Supplier';
     final amountFormatted = NumberFormat("#,##0").format(party.amount);
-    
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -129,8 +120,6 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                   // To ensure the balance auto-updates with Supabase trigger we should really use a StreamBuilder for the party itself,
-                   // but for now, we'll show what was passed in, trusting the user returns to Dashboard to see refreshed Party overall balance
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -167,14 +156,12 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                 Text(party.dueDate != null ? 'Due: ${DateFormat('MMM dd, yyyy').format(party.dueDate!)}' : 'No Due Date', style: const TextStyle(color: Colors.white, fontSize: 12)),
                               ],
                             ),
-
                           ],
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Filter Tabs
                   Row(
                     children: [
                       _buildTabItem('Transactions', isActive: true),
@@ -208,7 +195,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                           Color txColor = AppColors.slate500;
                           IconData txIcon = Icons.swap_horiz;
                           String txTitle = tx['description']?.isEmpty ?? true ? type : tx['description'];
-                          
+
                           if (type == 'Got') {
                             amountPrefix = '+';
                             txColor = AppColors.success;
@@ -240,7 +227,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                               title: txTitle,
                               subtitle: '${DateFormat('MMM dd, h:mm a').format(date)} ${tx['payment_mode'] != 'None' ? '• Via ${tx['payment_mode']}' : ''}',
                               amount: '$amountPrefix\$${NumberFormat("#,##0").format(tx['amount'])}',
-                              balance: '', // Running balance omitted for simplicity
+                              balance: '',
                               isPositive: amountPrefix == '+',
                             ),
                           );
@@ -249,13 +236,11 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     },
                   ),
 
-
-                  const SizedBox(height: 100), // Bottom padding
+                  const SizedBox(height: 100),
                 ],
               ),
             ),
           ),
-          // Fixed Bottom Action Bar
           Container(
              padding: const EdgeInsets.all(16),
              decoration: BoxDecoration(
@@ -320,8 +305,8 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
         ],
       ),
     );
-      }, // StreamBuilder for Party
-    ); // StreamBuilder
+      },
+    );
   }
 
   Future<void> _showAddTransactionDialog(BuildContext context, Party party, String transactionType) async {
@@ -350,7 +335,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     decoration: const InputDecoration(labelText: 'Description (Optional)'),
                   ),
                   const SizedBox(height: 16),
-                  if (transactionType == 'Got' || transactionType == 'Gave') // For both, we might want to track where cash went
+                  if (transactionType == 'Got' || transactionType == 'Gave')
                     Row(
                       children: [
                         const Text('Via: '),
@@ -380,18 +365,13 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     final amount = double.tryParse(amountController.text) ?? 0.0;
                     if (amount > 0) {
                       try {
-                        final SupabaseClient supabase = Supabase.instance.client;
-                        final userId = supabase.auth.currentUser!.id;
-                        
-                        await supabase.from('transactions').insert({
-                          'user_id': userId,
-                          'party_id': party.id,
-                          'amount': amount,
-                          'description': descriptionController.text,
-                          'transaction_type': transactionType,
-                          'payment_mode': paymentMode,
-                        });
-                        
+                        await _transactionService.addTransaction(
+                          partyId: party.id,
+                          amount: amount,
+                          transactionType: transactionType,
+                          description: descriptionController.text,
+                          paymentMode: paymentMode,
+                        );
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -421,16 +401,6 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
           fontWeight: FontWeight.bold,
           fontSize: 14,
         ),
-      ),
-    );
-  }
-
-  Widget _buildDateGroup(String date) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        date.toUpperCase(),
-        style: const TextStyle(color: AppColors.slate500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
       ),
     );
   }

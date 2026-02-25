@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:ledgerly_app/services/profile_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Map<String, dynamic> initialProfile;
@@ -15,7 +15,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _businessNameController;
   late TextEditingController _cashController;
   late TextEditingController _bankController;
-  final _userId = Supabase.instance.client.auth.currentUser?.id;
+  final _profileService = ProfileService();
   bool _isLoading = false;
 
   @override
@@ -36,20 +36,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _saveSettings() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final cashVal = double.tryParse(_cashController.text) ?? 0.0;
       final bankVal = double.tryParse(_bankController.text) ?? 0.0;
-      
-      await Supabase.instance.client.from('profiles').update({
-        'business_name': _businessNameController.text,
-        'cash_in_hand': cashVal,
-        'bank_balance': bankVal,
-      }).eq('id', _userId!);
-      
+
+      await _profileService.updateProfile(
+        businessName: _businessNameController.text,
+        cashInHand: cashVal,
+        bankBalance: bankVal,
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved successfully'), backgroundColor: AppColors.success));
-        Navigator.pop(context); // Go back to dashboard
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
@@ -131,7 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: _isLoading 
+                child: _isLoading
                     ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Text('Save Settings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),

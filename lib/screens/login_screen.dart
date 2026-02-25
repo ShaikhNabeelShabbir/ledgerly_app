@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
-import 'package:ledgerly_app/supabase_constants.dart';
+import 'package:ledgerly_app/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,26 +14,25 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _authService = AuthService();
   bool _isLoading = false;
-  bool _isLogin = true; // Toggle between Login and Register
+  bool _isLogin = true;
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       if (_isLogin) {
-        // Login
-        await Supabase.instance.client.auth.signInWithPassword(
+        await _authService.signIn(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
       } else {
-        // Register
-        await Supabase.instance.client.auth.signUp(
+        await _authService.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
@@ -41,15 +40,11 @@ class _LoginScreenState extends State<LoginScreen> {
            ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Registration successful! Please login.')),
           );
-          // Auto switch to login
           setState(() {
             _isLogin = true;
           });
         }
       }
-      
-      // Navigation is handled by auth state listener in main.dart
-      
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -113,8 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 48),
-                  
-                  // Email Field
+
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -140,8 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  
-                  // Password Field
+
                   TextFormField(
                     controller: _passwordController,
                     obscureText: true,
@@ -167,8 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
-                  
-                  // Action Button
+
                   ElevatedButton(
                     onPressed: _isLoading ? null : _handleSubmit,
                     style: ElevatedButton.styleFrom(
@@ -180,10 +172,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       elevation: 2,
                     ),
-                    child: _isLoading 
+                    child: _isLoading
                       ? const SizedBox(
-                          height: 20, 
-                          width: 20, 
+                          height: 20,
+                          width: 20,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                         )
                       : Text(
@@ -192,8 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                   ),
                   const SizedBox(height: 16),
-                  
-                  // Toggle Button
+
                   TextButton(
                     onPressed: () {
                       setState(() {

@@ -3,8 +3,10 @@ import 'package:ledgerly_app/theme/app_theme.dart';
 import 'package:ledgerly_app/screens/party_ledger_screen.dart';
 import 'package:ledgerly_app/screens/settings_screen.dart';
 import 'package:ledgerly_app/screens/transactions_screen.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ledgerly_app/models/party.dart';
+import 'package:ledgerly_app/services/auth_service.dart';
+import 'package:ledgerly_app/services/profile_service.dart';
+import 'package:ledgerly_app/services/party_service.dart';
 import 'package:intl/intl.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -15,43 +17,25 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final _userId = Supabase.instance.client.auth.currentUser?.id;
-  bool _isCustomerTab = true; // Toggle for Customer/Supplier list
+  final _authService = AuthService();
+  final _profileService = ProfileService();
+  final _partyService = PartyService();
+  bool _isCustomerTab = true;
 
   @override
   void initState() {
     super.initState();
-    _ensureProfileExists();
-  }
-
-  Future<void> _ensureProfileExists() async {
-    if (_userId == null) return;
-    final profile = await Supabase.instance.client
-        .from('profiles')
-        .select()
-        .eq('id', _userId!)
-        .maybeSingle();
-    
-    if (profile == null) {
-      await Supabase.instance.client.from('profiles').insert({
-        'id': _userId,
-        'business_name': 'My Business',
-        'cash_in_hand': 0,
-        'bank_balance': 0,
-      });
-    }
+    _profileService.ensureProfileExists();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_userId == null) return const Scaffold(body: Center(child: Text('Please login')));
+    if (_authService.currentUserId == null) {
+      return const Scaffold(body: Center(child: Text('Please login')));
+    }
 
     return StreamBuilder<Map<String, dynamic>>(
-      stream: Supabase.instance.client
-          .from('profiles')
-          .stream(primaryKey: ['id'])
-          .eq('id', _userId!)
-          .map((data) => data.isNotEmpty ? data.first : {}),
+      stream: _profileService.watchProfile(),
       builder: (context, profileSnapshot) {
         if (profileSnapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -62,23 +46,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final cashInHand = (profile['cash_in_hand'] as num?)?.toDouble() ?? 0.0;
         final bankBalance = (profile['bank_balance'] as num?)?.toDouble() ?? 0.0;
 
-        // Fetch Parties Stream for calculations
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: Supabase.instance.client
-              .from('parties')
-              .stream(primaryKey: ['id'])
-              .order('created_at', ascending: false),
+          stream: _partyService.watchParties(),
           builder: (context, partiesSnapshot) {
             final partiesData = partiesSnapshot.data ?? [];
-            
-            // Calculate Totals
+
             double receivable = 0;
-            double payable = 0; // Assuming 'Supplier' type logic eventually, or just status based?
-                                // For now, let's assume 'Customer' with unpaid = Receivable.
-                                // If user marks as 'Supplier' in future update -> Payable.
-                                // Based on previous context, user asked for tabs 'Customer'/'Supplier'.
-            
-            // Let's deduce type from the 'party_type' column we added.
+            double payable = 0;
+
             for (var p in partiesData) {
               final amount = (p['amount'] as num?)?.toDouble() ?? 0.0;
               final type = p['party_type'] as String? ?? 'Customer';
@@ -89,8 +64,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 payable += amount;
               }
             }
-
-            final netPosition = (cashInHand + bankBalance + receivable) - payable;
 
             return Scaffold(
               backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -153,7 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               IconButton(
                                 icon: const Icon(Icons.logout, color: AppColors.slate500),
                                 onPressed: () async {
-                                   await Supabase.instance.client.auth.signOut();
+                                   await _authService.signOut();
                                 },
                               ),
                             ],
@@ -168,7 +141,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   children: [
                     const SizedBox(height: 16),
-                    // Summary Cards
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -187,9 +159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    // Outstanding Overview
                     const SizedBox(height: 8),
-                    // Tabs
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Container(
@@ -229,7 +199,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // List Items (Filtered)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Column(
@@ -237,9 +206,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                            final type = p['party_type'] as String? ?? 'Customer';
                            return _isCustomerTab ? type == 'Customer' : type == 'Supplier';
                         }).map((data) {
-                          final party = Party.fromJson(data); // Party model handles parsing
-                          // Note: Party model might need to parse 'party_type' if we update it.
-                          // Assuming Party model is resilient or ignores unknown fields for now.
+                          final party = Party.fromJson(data);
                           return Column(
                             children: [
                               _buildPartyItem(context, party),
@@ -289,12 +256,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Discarding original _updateBusinessName and _updateBalance which were here
-
   Future<void> _showAddPartyDialog(BuildContext context) async {
     final nameController = TextEditingController();
     DateTime? selectedDate = DateTime.now().add(const Duration(days: 7));
-    String selectedPartyType = 'Customer'; // New: Party Type
+    String selectedPartyType = 'Customer';
 
     return showDialog(
       context: context,
@@ -311,35 +276,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     decoration: const InputDecoration(labelText: 'Party Name'),
                   ),
                   const SizedBox(height: 16),
-DropdownButtonFormField<String>(
-  value: selectedPartyType,
-  decoration: const InputDecoration(
-    labelText: 'Type',
-    border: OutlineInputBorder(),
-  ),
-  items: const [
-    DropdownMenuItem(
-      value: 'Customer',
-      child: Text('Customer'),
-    ),
-    DropdownMenuItem(
-      value: 'Supplier',
-      child: Text('Supplier'),
-    ),
-  ],
-  onChanged: (String? newValue) {
-    setState(() {
-      selectedPartyType = newValue!;
-    });
-  },
-),
+                  DropdownButtonFormField<String>(
+                    value: selectedPartyType,
+                    decoration: const InputDecoration(
+                      labelText: 'Type',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'Customer', child: Text('Customer')),
+                      DropdownMenuItem(value: 'Supplier', child: Text('Supplier')),
+                    ],
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        selectedPartyType = newValue!;
+                      });
+                    },
+                  ),
                   const SizedBox(height: 16),
-
                   Row(
                     children: [
                       Expanded(
-                        child: Text(selectedDate == null 
-                            ? 'No Date Chosen!' 
+                        child: Text(selectedDate == null
+                            ? 'No Date Chosen!'
                             : 'Due: ${DateFormat('MMM dd, yyyy').format(selectedDate!)}'),
                       ),
                       TextButton(
@@ -369,15 +327,11 @@ DropdownButtonFormField<String>(
                     final name = nameController.text;
                     if (name.isNotEmpty) {
                       try {
-                        final userId = Supabase.instance.client.auth.currentUser!.id;
-                        await Supabase.instance.client.from('parties').insert({
-                          'user_id': userId,
-                          'name': name,
-                          'amount': 0.0, // Amount enforced to 0 on creation
-                          'avatar_text': name.substring(0, 2).toUpperCase(),
-                          'party_type': selectedPartyType,
-                          'due_date': selectedDate?.toIso8601String(),
-                        });
+                        await _partyService.addParty(
+                          name: name,
+                          partyType: selectedPartyType,
+                          dueDate: selectedDate,
+                        );
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -431,11 +385,11 @@ DropdownButtonFormField<String>(
   }
 
   Widget _buildPartyItem(BuildContext context, Party party) {
-    bool isOverdue = party.dueDate != null && 
-        party.dueDate!.isBefore(DateTime.now()) && 
+    bool isOverdue = party.dueDate != null &&
+        party.dueDate!.isBefore(DateTime.now()) &&
         party.amount > 0;
 
-    final dateText = party.dueDate != null 
+    final dateText = party.dueDate != null
         ? 'Due: ${DateFormat('MMM dd').format(party.dueDate!)}'
         : 'No Due Date';
 
@@ -464,7 +418,6 @@ DropdownButtonFormField<String>(
                     title: const Text('Delete', style: TextStyle(color: AppColors.danger)),
                     onTap: () async {
                       Navigator.pop(context);
-                      // Confirm delete
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
@@ -476,9 +429,9 @@ DropdownButtonFormField<String>(
                           ],
                         ),
                       );
-                      
+
                       if (confirm == true) {
-                        await Supabase.instance.client.from('parties').delete().eq('id', party.id);
+                        await _partyService.deleteParty(party.id);
                       }
                     },
                   ),
@@ -555,7 +508,7 @@ DropdownButtonFormField<String>(
                   const SizedBox(height: 16),
                    Row(
                     children: [
-                       const Text('Type: '), 
+                       const Text('Type: '),
                        ChoiceChip(
                          label: const Text('Customer'),
                          selected: selectedPartyType == 'Customer',
@@ -578,11 +531,10 @@ DropdownButtonFormField<String>(
                     ],
                   ),
                   const SizedBox(height: 16),
-
                   Row(
                     children: [
-                      Text(selectedDate == null 
-                          ? 'No Date Chosen!' 
+                      Text(selectedDate == null
+                          ? 'No Date Chosen!'
                           : 'Due: ${DateFormat('MMM dd, yyyy').format(selectedDate!)}'),
                       const Spacer(),
                       TextButton(
@@ -612,12 +564,12 @@ DropdownButtonFormField<String>(
                     final name = nameController.text;
                     if (name.isNotEmpty) {
                       try {
-                        await Supabase.instance.client.from('parties').update({
-                          'name': name,
-                          'avatar_text': name.substring(0, 2).toUpperCase(),
-                          'party_type': selectedPartyType,
-                          'due_date': selectedDate?.toIso8601String(),
-                        }).eq('id', party.id);
+                        await _partyService.updateParty(
+                          partyId: party.id,
+                          name: name,
+                          partyType: selectedPartyType,
+                          dueDate: selectedDate,
+                        );
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -640,7 +592,7 @@ DropdownButtonFormField<String>(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: isActive ? AppColors.primary : AppColors.slate500), 
+          Icon(icon, color: isActive ? AppColors.primary : AppColors.slate500),
           const SizedBox(height: 4),
           Text(label, style: TextStyle(fontSize: 10, fontWeight: isActive ? FontWeight.bold : FontWeight.w500, color: isActive ? AppColors.primary : AppColors.slate500)),
         ],

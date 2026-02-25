@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:ledgerly_app/services/party_service.dart';
+import 'package:ledgerly_app/services/transaction_service.dart';
 import 'package:intl/intl.dart';
 
 class TransactionsScreen extends StatefulWidget {
@@ -11,7 +12,8 @@ class TransactionsScreen extends StatefulWidget {
 }
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
-  final _userId = Supabase.instance.client.auth.currentUser?.id;
+  final _partyService = PartyService();
+  final _transactionService = TransactionService();
   late Stream<List<Map<String, dynamic>>> _transactionsStream;
   Map<String, Map<String, dynamic>> _partiesMap = {};
 
@@ -19,21 +21,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   void initState() {
     super.initState();
     _fetchParties();
-    _transactionsStream = Supabase.instance.client
-        .from('transactions')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', _userId!)
-        .order('created_at', ascending: false);
+    _transactionsStream = _transactionService.watchAllTransactions();
   }
 
   Future<void> _fetchParties() async {
     try {
-      final data = await Supabase.instance.client.from('parties').select('id, name, avatar_text');
+      final map = await _partyService.getPartiesMap();
       if (mounted) {
         setState(() {
-          for (var party in data) {
-            _partiesMap[party['id']] = party;
-          }
+          _partiesMap = map;
         });
       }
     } catch (e) {
@@ -82,10 +78,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               final type = tx['transaction_type'] as String;
               final partyId = tx['party_id'] as String;
               final partyData = _partiesMap[partyId] ?? {};
-              
+
               final partyName = partyData['name'] ?? 'Unknown Party';
               final avatarText = partyData['avatar_text'] ?? '?';
-              
+
               String defaultDesc = type;
               String amountPrefix = '';
               Color txColor = AppColors.slate500;
@@ -108,10 +104,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 txColor = Colors.orange;
               }
 
-              final description = tx['description']?.isEmpty ?? true 
+              final description = tx['description']?.isEmpty ?? true
                   ? defaultDesc
                   : tx['description'];
-                  
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12.0),
                 child: Container(
