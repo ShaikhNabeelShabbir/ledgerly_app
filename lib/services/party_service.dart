@@ -1,4 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:ledgerly_app/models/party.dart';
+import 'package:ledgerly_app/constants/enums.dart';
 
 class PartyService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -6,27 +8,30 @@ class PartyService {
   String? get _userId => _client.auth.currentUser?.id;
 
   /// Streams all parties for the current user, ordered by creation date (newest first).
-  Stream<List<Map<String, dynamic>>> watchParties() {
+  Stream<List<Party>> watchParties() {
     return _client
         .from('parties')
         .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .map((data) => data.map((json) => Party.fromJson(json)).toList());
   }
 
   /// Streams a single party by its ID for real-time updates.
-  Stream<List<Map<String, dynamic>>> watchParty(String partyId) {
+  Stream<List<Party>> watchParty(String partyId) {
     return _client
         .from('parties')
         .stream(primaryKey: ['id'])
-        .eq('id', partyId);
+        .eq('id', partyId)
+        .map((data) => data.map((json) => Party.fromJson(json)).toList());
   }
 
-  /// Fetches all parties as a map of {partyId: partyData} for quick lookups.
-  Future<Map<String, Map<String, dynamic>>> getPartiesMap() async {
-    final data = await _client.from('parties').select('id, name, avatar_text');
-    final map = <String, Map<String, dynamic>>{};
-    for (var party in data) {
-      map[party['id']] = party;
+  /// Fetches all parties as a map of {partyId: Party} for quick lookups.
+  Future<Map<String, Party>> getPartiesMap() async {
+    final data = await _client.from('parties').select();
+    final map = <String, Party>{};
+    for (var json in data) {
+      final party = Party.fromJson(json);
+      map[party.id] = party;
     }
     return map;
   }
@@ -34,7 +39,7 @@ class PartyService {
   /// Adds a new party for the current user.
   Future<void> addParty({
     required String name,
-    required String partyType,
+    required PartyType partyType,
     DateTime? dueDate,
   }) {
     return _client.from('parties').insert({
@@ -42,7 +47,7 @@ class PartyService {
       'name': name,
       'amount': 0.0,
       'avatar_text': name.substring(0, 2).toUpperCase(),
-      'party_type': partyType,
+      'party_type': partyType.value,
       'due_date': dueDate?.toIso8601String(),
     });
   }
@@ -51,13 +56,13 @@ class PartyService {
   Future<void> updateParty({
     required String partyId,
     required String name,
-    required String partyType,
+    required PartyType partyType,
     DateTime? dueDate,
   }) {
     return _client.from('parties').update({
       'name': name,
       'avatar_text': name.substring(0, 2).toUpperCase(),
-      'party_type': partyType,
+      'party_type': partyType.value,
       'due_date': dueDate?.toIso8601String(),
     }).eq('id', partyId);
   }

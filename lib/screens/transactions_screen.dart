@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
+import 'package:ledgerly_app/models/party.dart';
+import 'package:ledgerly_app/models/transaction.dart' as models;
+import 'package:ledgerly_app/constants/enums.dart';
 import 'package:ledgerly_app/services/party_service.dart';
 import 'package:ledgerly_app/services/transaction_service.dart';
 import 'package:intl/intl.dart';
@@ -14,8 +17,8 @@ class TransactionsScreen extends StatefulWidget {
 class _TransactionsScreenState extends State<TransactionsScreen> {
   final _partyService = PartyService();
   final _transactionService = TransactionService();
-  late Stream<List<Map<String, dynamic>>> _transactionsStream;
-  Map<String, Map<String, dynamic>> _partiesMap = {};
+  late Stream<List<models.Transaction>> _transactionsStream;
+  Map<String, Party> _partiesMap = {};
 
   @override
   void initState() {
@@ -37,6 +40,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
+  Color _txColor(TransactionType type) {
+    switch (type) {
+      case TransactionType.got:
+        return AppColors.success;
+      case TransactionType.gave:
+        return AppColors.danger;
+      case TransactionType.toReceive:
+      case TransactionType.toGive:
+        return Colors.orange;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -53,7 +68,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
            )
         ],
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
+      body: StreamBuilder<List<models.Transaction>>(
         stream: _transactionsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -74,39 +89,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             itemCount: transactions.length,
             itemBuilder: (context, index) {
               final tx = transactions[index];
-              final date = DateTime.parse(tx['created_at']);
-              final type = tx['transaction_type'] as String;
-              final partyId = tx['party_id'] as String;
-              final partyData = _partiesMap[partyId] ?? {};
-
-              final partyName = partyData['name'] ?? 'Unknown Party';
-              final avatarText = partyData['avatar_text'] ?? '?';
-
-              String defaultDesc = type;
-              String amountPrefix = '';
-              Color txColor = AppColors.slate500;
-
-              if (type == 'Got') {
-                defaultDesc = 'Received Amount';
-                amountPrefix = '+';
-                txColor = AppColors.success;
-              } else if (type == 'Gave') {
-                defaultDesc = 'Given Amount';
-                amountPrefix = '-';
-                txColor = AppColors.danger;
-              } else if (type == 'To Receive') {
-                defaultDesc = 'Amount to be Received';
-                amountPrefix = '+';
-                txColor = Colors.orange;
-              } else if (type == 'To Give') {
-                defaultDesc = 'Amount to be Given';
-                amountPrefix = '-';
-                txColor = Colors.orange;
-              }
-
-              final description = tx['description']?.isEmpty ?? true
-                  ? defaultDesc
-                  : tx['description'];
+              final party = _partiesMap[tx.partyId];
+              final partyName = party?.name ?? 'Unknown Party';
+              final avatarText = party?.avatarText ?? '?';
+              final txColor = _txColor(tx.transactionType);
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12.0),
@@ -141,18 +127,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(child: Text(partyName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                                Text('$amountPrefix\$${NumberFormat("#,##0").format(tx['amount'])}', style: TextStyle(color: txColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                                Text('${tx.amountPrefix}\$${NumberFormat("#,##0").format(tx.amount)}', style: TextStyle(color: txColor, fontWeight: FontWeight.bold, fontSize: 16)),
                               ],
                             ),
                             const SizedBox(height: 4),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Expanded(child: Text(description, style: const TextStyle(color: AppColors.slate500, fontSize: 12), overflow: TextOverflow.ellipsis)),
-                                Text(DateFormat('MMM dd, hh:mm a').format(date), style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
+                                Expanded(child: Text(tx.displayTitle, style: const TextStyle(color: AppColors.slate500, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                                Text(DateFormat('MMM dd, hh:mm a').format(tx.createdAt), style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
                               ],
                             ),
-                            if (tx['payment_mode'] != 'None') ...[
+                            if (tx.paymentMode != PaymentMode.none) ...[
                               const SizedBox(height: 4),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -160,7 +146,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                   color: AppColors.success.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: Text('Via ${tx['payment_mode']}', style: const TextStyle(color: AppColors.success, fontSize: 8, fontWeight: FontWeight.bold)),
+                                child: Text('Via ${tx.paymentMode.value}', style: const TextStyle(color: AppColors.success, fontSize: 8, fontWeight: FontWeight.bold)),
                               ),
                             ]
                           ],

@@ -4,6 +4,8 @@ import 'package:ledgerly_app/screens/party_ledger_screen.dart';
 import 'package:ledgerly_app/screens/settings_screen.dart';
 import 'package:ledgerly_app/screens/transactions_screen.dart';
 import 'package:ledgerly_app/models/party.dart';
+import 'package:ledgerly_app/models/profile.dart';
+import 'package:ledgerly_app/constants/enums.dart';
 import 'package:ledgerly_app/services/auth_service.dart';
 import 'package:ledgerly_app/services/profile_service.dart';
 import 'package:ledgerly_app/services/party_service.dart';
@@ -34,34 +36,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return const Scaffold(body: Center(child: Text('Please login')));
     }
 
-    return StreamBuilder<Map<String, dynamic>>(
+    return StreamBuilder<Profile>(
       stream: _profileService.watchProfile(),
       builder: (context, profileSnapshot) {
         if (profileSnapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
-        final profile = profileSnapshot.data ?? {};
-        final businessName = profile['business_name'] ?? 'My Business';
-        final cashInHand = (profile['cash_in_hand'] as num?)?.toDouble() ?? 0.0;
-        final bankBalance = (profile['bank_balance'] as num?)?.toDouble() ?? 0.0;
+        final profile = profileSnapshot.data ?? Profile.empty();
 
-        return StreamBuilder<List<Map<String, dynamic>>>(
+        return StreamBuilder<List<Party>>(
           stream: _partyService.watchParties(),
           builder: (context, partiesSnapshot) {
-            final partiesData = partiesSnapshot.data ?? [];
+            final parties = partiesSnapshot.data ?? [];
 
             double receivable = 0;
             double payable = 0;
 
-            for (var p in partiesData) {
-              final amount = (p['amount'] as num?)?.toDouble() ?? 0.0;
-              final type = p['party_type'] as String? ?? 'Customer';
-
-              if (type == 'Customer') {
-                receivable += amount;
+            for (var party in parties) {
+              if (party.isCustomer) {
+                receivable += party.amount;
               } else {
-                payable += amount;
+                payable += party.amount;
               }
             }
 
@@ -95,7 +91,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(businessName, style: const TextStyle(color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.bold)),
+                                  Text(profile.businessName, style: const TextStyle(color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.bold)),
                                   Text('Today, ${DateFormat('MMM dd').format(DateTime.now())}', style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
                                 ],
                               ),
@@ -146,10 +142,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Row(
                         children: [
-                          _buildSummaryCard(context, Icons.payments, 'Cash in Hand', '\$${NumberFormat("#,##0").format(cashInHand)}', onTap: () {
+                          _buildSummaryCard(context, Icons.payments, 'Cash in Hand', '\$${NumberFormat("#,##0").format(profile.cashInHand)}', onTap: () {
                           }, isEditable: true),
                           const SizedBox(width: 16),
-                          _buildSummaryCard(context, Icons.account_balance, 'Bank Balance', '\$${NumberFormat("#,##0").format(bankBalance)}', onTap: () {
+                          _buildSummaryCard(context, Icons.account_balance, 'Bank Balance', '\$${NumberFormat("#,##0").format(profile.bankBalance)}', onTap: () {
                           }, isEditable: true),
                           const SizedBox(width: 16),
                           _buildSummaryCard(context, Icons.call_received, 'Receivable', '\$${NumberFormat("#,##0").format(receivable)}', onTap: () => setState(() => _isCustomerTab = true)),
@@ -202,11 +198,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Column(
-                        children: partiesData.where((p) {
-                           final type = p['party_type'] as String? ?? 'Customer';
-                           return _isCustomerTab ? type == 'Customer' : type == 'Supplier';
-                        }).map((data) {
-                          final party = Party.fromJson(data);
+                        children: parties.where((party) {
+                           return _isCustomerTab ? party.isCustomer : !party.isCustomer;
+                        }).map((party) {
                           return Column(
                             children: [
                               _buildPartyItem(context, party),
@@ -259,7 +253,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _showAddPartyDialog(BuildContext context) async {
     final nameController = TextEditingController();
     DateTime? selectedDate = DateTime.now().add(const Duration(days: 7));
-    String selectedPartyType = 'Customer';
+    PartyType selectedPartyType = PartyType.customer;
 
     return showDialog(
       context: context,
@@ -276,17 +270,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     decoration: const InputDecoration(labelText: 'Party Name'),
                   ),
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
+                  DropdownButtonFormField<PartyType>(
                     value: selectedPartyType,
                     decoration: const InputDecoration(
                       labelText: 'Type',
                       border: OutlineInputBorder(),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'Customer', child: Text('Customer')),
-                      DropdownMenuItem(value: 'Supplier', child: Text('Supplier')),
-                    ],
-                    onChanged: (String? newValue) {
+                    items: PartyType.values.map((type) {
+                      return DropdownMenuItem(value: type, child: Text(type.value));
+                    }).toList(),
+                    onChanged: (PartyType? newValue) {
                       setState(() {
                         selectedPartyType = newValue!;
                       });
@@ -489,7 +482,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _showEditPartyDialog(BuildContext context, Party party) async {
     final nameController = TextEditingController(text: party.name);
     DateTime? selectedDate = party.dueDate;
-    String selectedPartyType = party.partyType ?? 'Customer';
+    PartyType selectedPartyType = party.partyType;
 
     return showDialog(
       context: context,
@@ -511,20 +504,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                        const Text('Type: '),
                        ChoiceChip(
                          label: const Text('Customer'),
-                         selected: selectedPartyType == 'Customer',
+                         selected: selectedPartyType == PartyType.customer,
                          onSelected: (bool selected) {
                            setState(() {
-                             selectedPartyType = 'Customer';
+                             selectedPartyType = PartyType.customer;
                            });
                          },
                        ),
                        const SizedBox(width: 8),
                        ChoiceChip(
                          label: const Text('Supplier'),
-                         selected: selectedPartyType == 'Supplier',
+                         selected: selectedPartyType == PartyType.supplier,
                          onSelected: (bool selected) {
                            setState(() {
-                             selectedPartyType = 'Supplier';
+                             selectedPartyType = PartyType.supplier;
                            });
                          },
                        ),

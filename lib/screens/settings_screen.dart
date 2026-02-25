@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
+import 'package:ledgerly_app/models/profile.dart';
 import 'package:ledgerly_app/services/profile_service.dart';
 
 class SettingsScreen extends StatefulWidget {
-  final Map<String, dynamic> initialProfile;
+  final Profile initialProfile;
 
   const SettingsScreen({super.key, required this.initialProfile});
 
@@ -21,9 +22,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _businessNameController = TextEditingController(text: widget.initialProfile['business_name'] ?? '');
-    _cashController = TextEditingController(text: (widget.initialProfile['cash_in_hand'] ?? 0).toString());
-    _bankController = TextEditingController(text: (widget.initialProfile['bank_balance'] ?? 0).toString());
+    _businessNameController = TextEditingController(text: widget.initialProfile.businessName);
+    _cashController = TextEditingController(text: widget.initialProfile.cashInHand.toString());
+    _bankController = TextEditingController(text: widget.initialProfile.bankBalance.toString());
   }
 
   @override

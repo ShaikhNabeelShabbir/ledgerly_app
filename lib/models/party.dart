@@ -1,10 +1,11 @@
+import 'package:ledgerly_app/constants/enums.dart';
+
 class Party {
   final String id;
   final String name;
   final String avatarText;
   final double amount;
-
-  final String? partyType; // Added partyType field
+  final PartyType partyType;
   final DateTime? dueDate;
   final DateTime createdAt;
 
@@ -13,8 +14,7 @@ class Party {
     required this.name,
     required this.avatarText,
     required this.amount,
-
-    this.partyType, // Added partyType to constructor
+    required this.partyType,
     this.dueDate,
     required this.createdAt,
   });
@@ -25,8 +25,7 @@ class Party {
       name: json['name'] as String,
       avatarText: json['avatar_text'] as String? ?? '',
       amount: (json['amount'] as num).toDouble(),
-
-      partyType: json['party_type'] as String?, // Added partyType to fromJson
+      partyType: PartyType.fromValue(json['party_type'] as String? ?? 'Customer'),
       dueDate: json['due_date'] != null ? DateTime.parse(json['due_date'] as String) : null,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
@@ -37,10 +36,11 @@ class Party {
       'name': name,
       'avatar_text': avatarText,
       'amount': amount,
-
-      'party_type': partyType,
+      'party_type': partyType.value,
       'due_date': dueDate?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
     };
   }
+
+  bool get isCustomer => partyType == PartyType.customer;
 }

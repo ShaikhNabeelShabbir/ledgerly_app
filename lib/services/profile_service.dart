@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:ledgerly_app/models/profile.dart';
 
 class ProfileService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -26,12 +27,14 @@ class ProfileService {
   }
 
   /// Streams the current user's profile data in real-time.
-  Stream<Map<String, dynamic>> watchProfile() {
+  Stream<Profile> watchProfile() {
     return _client
         .from('profiles')
         .stream(primaryKey: ['id'])
         .eq('id', _userId!)
-        .map((data) => data.isNotEmpty ? data.first : {});
+        .map((data) => data.isNotEmpty
+            ? Profile.fromJson(data.first)
+            : Profile.empty());
   }
 
   /// Updates the current user's profile with the given fields.

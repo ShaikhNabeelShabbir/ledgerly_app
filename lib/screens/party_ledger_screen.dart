@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:ledgerly_app/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import 'package:ledgerly_app/models/party.dart';
+import 'package:ledgerly_app/models/transaction.dart' as models;
+import 'package:ledgerly_app/constants/enums.dart';
 import 'package:ledgerly_app/services/party_service.dart';
 import 'package:ledgerly_app/services/transaction_service.dart';
 
@@ -16,8 +18,8 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   final _partyService = PartyService();
   final _transactionService = TransactionService();
   Party? _initialParty;
-  Stream<List<Map<String, dynamic>>>? _transactionsStream;
-  Stream<List<Map<String, dynamic>>>? _partyStream;
+  Stream<List<Party>>? _partyStream;
+  Stream<List<models.Transaction>>? _transactionsStream;
 
   @override
   void didChangeDependencies() {
@@ -32,6 +34,29 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     }
   }
 
+  Color _txColor(TransactionType type) {
+    switch (type) {
+      case TransactionType.got:
+        return AppColors.success;
+      case TransactionType.gave:
+        return AppColors.danger;
+      case TransactionType.toReceive:
+      case TransactionType.toGive:
+        return Colors.orange;
+    }
+  }
+
+  IconData _txIcon(TransactionType type) {
+    switch (type) {
+      case TransactionType.got:
+      case TransactionType.toReceive:
+        return Icons.arrow_downward;
+      case TransactionType.gave:
+      case TransactionType.toGive:
+        return Icons.arrow_upward;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_initialParty == null) {
@@ -41,15 +66,14 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       );
     }
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
+    return StreamBuilder<List<Party>>(
       stream: _partyStream,
       builder: (context, partySnapshot) {
         Party party = _initialParty!;
         if (partySnapshot.hasData && partySnapshot.data!.isNotEmpty) {
-          party = Party.fromJson(partySnapshot.data!.first);
+          party = partySnapshot.data!.first;
         }
 
-    final isCustomer = party.partyType != 'Supplier';
     final amountFormatted = NumberFormat("#,##0").format(party.amount);
 
     return Scaffold(
@@ -79,7 +103,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(party.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                          Text(isCustomer ? 'Customer' : 'Supplier', style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
+                          Text(party.partyType.value, style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
                         ],
                       ),
                     ],
@@ -99,7 +123,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       Container(
                         width: 40,
                         height: 40,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: AppColors.slate100,
                           shape: BoxShape.circle,
                         ),
@@ -168,7 +192,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  StreamBuilder<List<Map<String, dynamic>>>(
+                  StreamBuilder<List<models.Transaction>>(
                     stream: _transactionsStream,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -189,46 +213,23 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
 
                       return Column(
                         children: transactions.map((tx) {
-                          final date = DateTime.parse(tx['created_at']);
-                          final type = tx['transaction_type'] as String;
-                          String amountPrefix = '';
-                          Color txColor = AppColors.slate500;
-                          IconData txIcon = Icons.swap_horiz;
-                          String txTitle = tx['description']?.isEmpty ?? true ? type : tx['description'];
-
-                          if (type == 'Got') {
-                            amountPrefix = '+';
-                            txColor = AppColors.success;
-                            txIcon = Icons.arrow_downward;
-                            if (tx['description']?.isEmpty ?? true) txTitle = 'Received Amount';
-                          } else if (type == 'Gave') {
-                            amountPrefix = '-';
-                            txColor = AppColors.danger;
-                            txIcon = Icons.arrow_upward;
-                            if (tx['description']?.isEmpty ?? true) txTitle = 'Given Amount';
-                          } else if (type == 'To Receive') {
-                            amountPrefix = '+';
-                            txColor = Colors.orange;
-                            txIcon = Icons.arrow_downward;
-                            if (tx['description']?.isEmpty ?? true) txTitle = 'Amount to be Received';
-                          } else if (type == 'To Give') {
-                            amountPrefix = '-';
-                            txColor = Colors.orange;
-                            txIcon = Icons.arrow_upward;
-                            if (tx['description']?.isEmpty ?? true) txTitle = 'Amount to be Given';
-                          }
+                          final color = _txColor(tx.transactionType);
+                          final icon = _txIcon(tx.transactionType);
+                          final paymentInfo = tx.paymentMode != PaymentMode.none
+                              ? '• Via ${tx.paymentMode.value}'
+                              : '';
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12.0),
                             child: _buildTransactionItem(
                               context,
-                              icon: txIcon,
-                              iconColor: txColor,
-                              title: txTitle,
-                              subtitle: '${DateFormat('MMM dd, h:mm a').format(date)} ${tx['payment_mode'] != 'None' ? '• Via ${tx['payment_mode']}' : ''}',
-                              amount: '$amountPrefix\$${NumberFormat("#,##0").format(tx['amount'])}',
+                              icon: icon,
+                              iconColor: color,
+                              title: tx.displayTitle,
+                              subtitle: '${DateFormat('MMM dd, h:mm a').format(tx.createdAt)} $paymentInfo',
+                              amount: '${tx.amountPrefix}\$${NumberFormat("#,##0").format(tx.amount)}',
                               balance: '',
-                              isPositive: amountPrefix == '+',
+                              isPositive: tx.isPositive,
                             ),
                           );
                         }).toList(),
@@ -262,25 +263,25 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                   leading: const Icon(Icons.arrow_downward, color: AppColors.success),
                                   title: const Text('Got Amount'),
                                   subtitle: const Text('Received cash or bank transfer'),
-                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, 'Got'); },
+                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, TransactionType.got); },
                                 ),
                                 ListTile(
                                   leading: const Icon(Icons.arrow_upward, color: AppColors.danger),
                                   title: const Text('Gave Amount'),
                                   subtitle: const Text('Paid cash or bank transfer'),
-                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, 'Gave'); },
+                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, TransactionType.gave); },
                                 ),
                                 ListTile(
                                   leading: const Icon(Icons.arrow_downward, color: Colors.orange),
                                   title: const Text('Amount to be Received'),
                                   subtitle: const Text('Credit sale or debt accrued to them'),
-                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, 'To Receive'); },
+                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, TransactionType.toReceive); },
                                 ),
                                 ListTile(
                                   leading: const Icon(Icons.arrow_upward, color: Colors.orange),
                                   title: const Text('Amount to be Given'),
                                   subtitle: const Text('Credit purchase or debt accrued to you'),
-                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, 'To Give'); },
+                                  onTap: () { Navigator.pop(context); _showAddTransactionDialog(context, party, TransactionType.toGive); },
                                 ),
                               ],
                             ),
@@ -309,11 +310,10 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     );
   }
 
-  Future<void> _showAddTransactionDialog(BuildContext context, Party party, String transactionType) async {
+  Future<void> _showAddTransactionDialog(BuildContext context, Party party, TransactionType transactionType) async {
     final amountController = TextEditingController();
     final descriptionController = TextEditingController();
-    String paymentMode = 'None';
-    final List<String> paymentModes = ['None', 'Cash', 'Bank'];
+    PaymentMode paymentMode = PaymentMode.none;
 
     return showDialog(
       context: context,
@@ -321,7 +321,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text('$transactionType Amount'),
+              title: Text('${transactionType.value} Amount'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -335,18 +335,15 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     decoration: const InputDecoration(labelText: 'Description (Optional)'),
                   ),
                   const SizedBox(height: 16),
-                  if (transactionType == 'Got' || transactionType == 'Gave')
+                  if (transactionType == TransactionType.got || transactionType == TransactionType.gave)
                     Row(
                       children: [
                         const Text('Via: '),
                         const SizedBox(width: 8),
-                        DropdownButton<String>(
+                        DropdownButton<PaymentMode>(
                           value: paymentMode,
-                          items: paymentModes.map((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
+                          items: PaymentMode.values.map((mode) {
+                            return DropdownMenuItem(value: mode, child: Text(mode.value));
                           }).toList(),
                           onChanged: (newValue) {
                             setState(() {
